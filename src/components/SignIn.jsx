@@ -1,7 +1,7 @@
 import { useMoralis } from "react-moralis";
 import "antd/dist/antd.css";
 import "../style.css";
-import { Spin, Dropdown, Button, Menu } from "antd";
+import { Spin, Dropdown, Button, Menu, Modal } from "antd";
 import Text from "antd/lib/typography/Text";
 import { DownOutlined } from "@ant-design/icons";
 // import { connectors } from "./Account/config";
@@ -11,9 +11,18 @@ import google from "./Account/WalletIcons/google.svg";
 import twitter from "./Account/WalletIcons/twitter.svg";
 import facebook from "./Account/WalletIcons/facebook.svg";
 import github from "./Account/WalletIcons/github.svg";
+import discord from "./Account/WalletIcons/discord.svg";
+import reddit from "./Account/WalletIcons/reddit.svg";
+import twitch from "./Account/WalletIcons/twitch.svg";
+import linked from "./Account/WalletIcons/linked.svg";
+import line from "./Account/WalletIcons/line.svg";
 import { AvaxLogo, PolygonLogo, BSCLogo, ETHLogo } from "./Chains/Logos";
 // import Logo from "./Account/WalletIcons/Web3Auth.svg";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+// import { Web3AuthCore } from "@web3auth/core";
+// import { CHAIN_NAMESPACES, ADAPTER_EVENTS } from "@web3auth/base";
+// import { OpenloginAdapter } from "@web3auth/openlogin-adapter";
+import { validateEmail } from "../helpers/utils";
 
 const styles = {
   account: {
@@ -136,19 +145,32 @@ const menuItems = [
   },
 ];
 
-export default function SignIn() {
-  const { authenticate, authError, isAuthenticating } = useMoralis();
-  const [selected, setSelected] = useState({});
-  const [chain, setchain] = useState("");
+export default function SignIn({ web3AuthCore, chain, setchain, selected }) {
+  const { authError, isAuthenticating } = useMoralis();
+  // const [selected, setSelected] = useState({});
+  // const [chain, setchain] = useState("");
+  // const [web3AuthCore, setweb3AuthCore] = useState("");
+  const [visible, setVisibility] = useState(false);
+  const [email, setEmail] = useState("");
+  const [viewMoreOptions, setViewMoreOptions] = useState(false);
+
+  const socialOptions = [
+    { name: "apple", src: apple },
+    { name: "google", src: google },
+    { name: "twitter", src: twitter },
+    { name: "facebook", src: facebook },
+    { name: "github", src: github },
+  ];
+  const moreSocialOptions = [
+    // different social logins to go here
+    { name: "discord", src: discord },
+    { name: "reddit", src: reddit },
+    { name: "twitch", src: twitch },
+    { name: "linkedin", src: linked },
+    { name: "line", src: line },
+  ];
 
   console.log("chain", chain);
-
-  useEffect(() => {
-    if (!chain) return null;
-    const newSelected = menuItems.find((item) => item.key === chain);
-    setSelected(newSelected);
-    console.log("current chainId: ", chain);
-  }, [chain]);
 
   const handleMenuClick = (e) => {
     setchain(e.key);
@@ -165,17 +187,51 @@ export default function SignIn() {
     </Menu>
   );
 
-  const handleCustomLogin = async () => {
-    await authenticate({
-      provider: "web3Auth",
-      clientId:
-        "BE2p8-JooSSoekLwDP-cdFgGLrCDGOC_5F-VgtHYY1I7BG0OzuVbDlNQVZJlC-b37ZI_rnVNt4Q2gAVQovvY3CI",
-      chainId: `${chain}` || "0x2a",
-      appLogo: "pizza.svg",
-    });
-    window.localStorage.setItem("connectorId", "web3Auth");
+  const handleSocialLogin = async (provider) => {
+    try {
+      if (provider == "email_passwordless") {
+        // check email and provide error message if invalid.
+        if (validateEmail(email)) {
+          // re-initialise web3 with email here?
+          await web3AuthCore.connectTo("openlogin", {
+            loginProvider: provider,
+            extraLoginOptions: {
+              login_hint: email,
+            },
+          });
+        } else {
+          // show pop-up need to add valid email
+        }
+      } else {
+        await web3AuthCore.connectTo("openlogin", {
+          loginProvider: provider,
+        });
+      }
+
+      window.localStorage.setItem("connectorId", "web3Auth");
+    } catch (e) {
+      // error handling here
+      console.log("error from custom login - ", e);
+    }
   };
 
+  const showSocialOptions = (options) => {
+    return options.map((val) => (
+      <img
+        onClick={() => handleSocialLogin(val.name)}
+        src={val.src}
+        alt="logo"
+        width={40}
+        height={40}
+      />
+    ));
+  };
+
+  const handleLogout = async () => {
+    await web3AuthCore.logout();
+  };
+
+  console.log("web3AuthCore from SignIn - ", web3AuthCore);
   return (
     <div style={styles.account}>
       <div className="glass-card" style={styles.card}>
@@ -211,7 +267,7 @@ export default function SignIn() {
         {authError && alert(JSON.stringify(authError.message))}
         <div>
           <div style={styles.buttonCard}>
-            <div style={styles.socialicons} onClick={handleCustomLogin}>
+            <div style={styles.socialicons} onClick={() => setVisibility(true)}>
               <img src={apple} alt="logo" />
               <img src={google} alt="logo" />
               <img src={twitter} alt="logo" />
@@ -219,7 +275,10 @@ export default function SignIn() {
               <img src={github} alt="logo" />
               <Text>and more</Text>
             </div>
-            <button style={styles.loginButton} onClick={handleCustomLogin}>
+            <button
+              style={styles.loginButton}
+              onClick={() => setVisibility(true)}
+            >
               Social Login with Web3Auth
             </button>
           </div>
@@ -229,43 +288,117 @@ export default function SignIn() {
           </button>
         </div>
       </div>
+      <button onClick={handleLogout}>logout</button>
+      <Modal
+        title={
+          <div style={{ display: "flex" }}>
+            <div style={{ marginRight: "10px", marginTop: "5px" }}>
+              <img style={styles.img} src="pizza.svg" width={35} height={35} />
+            </div>
+            <div>
+              <h3>Signin</h3>
+              <h5>Select one of the following to continue</h5>
+            </div>
+          </div>
+        }
+        visible={visible}
+        width={375}
+        onCancel={() => setVisibility(false)}
+        footer={
+          <div
+            style={{
+              float: "left",
+              fontSize: "11px",
+              marginBottom: "10px",
+              marginLeft: "10px",
+            }}
+          >
+            <p>Terms of use | Privacy policy</p>
+          </div>
+        }
+      >
+        <div style={styles.socialicons}>{showSocialOptions(socialOptions)}</div>
 
-      {/* <div className="glass-card" style={styles.web3}>
-        <div
+        {viewMoreOptions && (
+          <div style={styles.socialicons}>
+            {showSocialOptions(moreSocialOptions)}
+          </div>
+        )}
+
+        <p
           style={{
-            padding: "10px",
-            display: "flex",
-            justifyContent: "center",
-            fontWeight: "700",
-            fontSize: "20px",
+            float: "right",
+            fontSize: "12px",
+            cursor: "pointer",
+            marginRight: "20px",
+            marginTop: "10px",
           }}
+          onClick={() => setViewMoreOptions(!viewMoreOptions)}
         >
-          <Spin spinning={isAuthenticating}> Connect Wallet </Spin>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
-          {connectors.map(({ title, icon, connectorId }, key) => (
+          View {viewMoreOptions ? "less" : "more"} options
+        </p>
+        <div style={{ marginTop: "40px" }}>
+          <div
+            style={{
+              fontWeight: "400",
+              fontSize: "14px",
+              lineHeight: "1.5em",
+              marginBottom: "8px",
+            }}
+          >
+            EMAIL
+          </div>
+          <input
+            style={{
+              background: "#393938",
+              border: "1px solid #27282d",
+              boxSizing: "border-box",
+              boxShadow: "inset 2px 2px 10px rgba(0, 0, 0, 0.4)",
+              borderRadius: "24px",
+              padding: "0 28px",
+              height: "48px",
+              width: "100%",
+              fontSize: "16px",
+              marginBottom: "16px",
+            }}
+            type="text"
+            placeholder="Email"
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <div
+            style={{
+              backgroundColor: "#2f3136",
+              border: "1px solid #404145",
+              boxSizing: "border-box",
+              boxShadow: "2px 2px 12px rgb(3 100 255 / 5%)",
+              borderRadius: "24px",
+              height: "48px",
+              width: "100%",
+              padding: "8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#65676f",
+              fontStyle: "normal",
+              fontWeight: "400",
+              fontSize: "16px",
+              cursor: "pointer",
+            }}
+            onClick={() => handleSocialLogin("email_passwordless")}
+          >
             <div
-              style={styles.connector}
-              key={key}
-              onClick={async () => {
-                try {
-                  await authenticate({
-                    provider: connectorId,
-                    signingMessage: "Pizza Authentication",
-                  });
-                  window.localStorage.setItem("connectorId", connectorId);
-                } catch (e) {
-                  console.log(e);
-                  alert(e.message);
-                }
+              style={{
+                textAlign: "center",
+                verticalAlign: "middle",
+                lineHeight: "45px",
+                cursor: "pointer",
               }}
             >
-              <img src={icon} alt={title} style={styles.icon} />
-              <Text style={{ fontSize: "14px" }}>{title}</Text>
+              Continue with Email
             </div>
-          ))}
+          </div>
         </div>
-      </div> */}
+      </Modal>
     </div>
   );
 }
